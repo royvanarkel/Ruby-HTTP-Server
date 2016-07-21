@@ -48,6 +48,11 @@ loop do
 	socket = server.accept
 	request_line = socket.gets
 	http_method = request_line.split(" ")[0]
+  headers = {}
+  while line = socket.gets.split(' ', 2)              # Collect HTTP headers
+    break if line[0] == ""                            # Blank line means no more headers
+    headers[line[0].chop] = line[1].strip             # Hash headers by type
+  end
 	STDERR.puts request_line
 
 	path = requested_file(request_line)
@@ -78,8 +83,17 @@ loop do
     end
 
   elsif http_method == 'POST'
-    p socket.read
-    socket.close
+    p socket.read(headers["Content-Length"].to_i)
+    if File.exist?(path) && !File.directory?(path)
+      File.open(path, "rb") do |file|
+        socket.print "HTTP/1.1 200 OK\r\n" + "Content-Type: #{content_type(file)}\r\n" + "Content-Length: #{file.size}\r\n" + "Connection: close\r\n"
+        socket.print "\r\n"
+        IO.copy_stream(file, socket)
+        puts green("200 OK")
+      end
+    else
+      give_error(socket, ERROR[404])
+    end
 	end
 
 	socket.close
